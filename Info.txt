@@ -1,0 +1,1002 @@
+https://dev.to/francescoxx/python-fullstack-rest-api-app-with-docker-1101
+
+https://github.com/FrancescoXX/fullstack-flask-app
+
+===========================================================
+
+ Python 🐍 fullstack REST API app with Docker 🐳
+
+
+By the end of this, you will understand and create a simple yet complete full stack app using the following:
+
+    Next.js 14 (TypeScript)
+    Tailwind CSS
+    Flask (Python) + SQLAlchemy (ORM)
+    PostgreSQL
+    Docker
+    Docker Compose
+
+MANY technologies, but we'll keep the example as basic as possible to make it understandable.
+
+We will proceed with a bottom-up approach, starting with the database and ending with the frontend.
+
+If you prefer a video version
+
+All the code is available for free on GitHub (link in video description).
+Architecture
+
+Before we start, here is a simple schema explaining the app's architecture.
+
+Flask, Python + TypeScript full stack web app, with next
+
+    The frontend is a Next.js app with TypeScript and Tailwind CSS.
+
+    The backend is written in Python, using Flask and SQLAlchemy.
+
+    The database is PostgreSQL. We will use Docker to run the database, the backend, and also the frontend (you can also use Vercel). We will use Docker Compose to run the frontend, the backend, and the database together.
+
+Prerequisites
+
+    Basic knowledge of what is a frontend, a backend, an API, and a database
+    Docker installed on your machine
+    Python installed on your machine
+    (optional) Postman or any other tool to make HTTP requests
+
+1. Preparation
+
+Create any folder you want, and then open it with your favorite code editor.
+
+
+
+mkdir <YOUR_FOLDER>
+cd <YOUR_FOLDER>
+code .
+
+
+Initialize a git repository.
+
+
+
+git init
+touch .gitignore
+
+
+Populate the .gitignore file with the following content:
+
+
+
+*node_modules
+
+
+Create a file called compose.yml in the project's root.
+
+
+
+touch compose.yml
+
+
+Your projects should look like this:
+
+Flask, Python + TypeScript full stack web app, with next
+
+We are ready to create the fullstack app and build it from the bottom up, starting with the database.
+
+After each step, we will test the app's current state to ensure that everything is working as expected.
+2. Database
+
+We will use Postgres but not install it on our machine. Instead, we will use Docker to run it in a container. This way, we can easily start and stop the database without installing it on our machine.
+
+Open the file compose.yml and add the following content:
+
+
+
+services:
+  db:
+    container_name: db
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata: {}
+
+
+then type in your terminal
+
+
+
+docker compose up -d
+
+
+This will pull the Postgres image from Docker Hub and start the container. The -d flag means that the container will run in detached mode so we can continue to use the terminal.
+
+Check if the container is running:
+
+
+
+docker ps -a
+
+
+You should see the container running.
+
+Flask, Python + TypeScript full stack web app, with next
+
+Step into the db container
+
+
+
+docker exec -it db psql -U postgres
+
+
+Now that you are in the Postgres container, you can type:
+
+
+
+\l
+\dt
+
+
+And you should see no relations.
+
+Flask, Python + TypeScript full stack web app, with next
+
+You can leave the tab open. We will use it later.
+3. Backend
+
+The first step is done. Now, we will create the backend. We will use Go and Mux.
+
+Create a new folder called backend and step into it:
+
+
+
+mkdir backend
+cd backend
+
+
+Create 3 files
+
+
+
+touch requirements.txt app.py flask.dockerfile
+
+
+Your project should look like this:
+
+Flask, Python + TypeScript full stack web app, with next
+🗒️ requirements.txt file
+
+The requirements.txt file contains all the dependencies of the project. In our case we will need just 3.
+
+Let's add them to the requirements.txt file:
+
+
+
+flask
+psycopg2-binary
+Flask-SQLAlchemy
+Flask-CORS
+
+
+flask is the Python web framework we are gonna use.
+
+psycopg2-binary is the driver to make the connection with the Postgres database.
+
+Flask-SQLAlchemy is the ORM to make the queries to the database.
+
+Flask-CORS is a Flask extension for handling Cross Origin Resource Sharing (CORS), making cross-origin AJAX possible.
+🐍 app.py file
+
+The app.py file is the main file of the application: it contains all the endpoints and the logic of the application.
+
+Populate the app.py file as follows:
+
+
+
+from flask import Flask, request, jsonify, make_response
+from flask_sqlalchemy import SQLAlchemy
+from flask_cors import CORS  
+from os import environ
+
+app = Flask(__name__)
+CORS(app)  # Enable CORS for all routes
+app.config['SQLALCHEMY_DATABASE_URI'] = environ.get('DATABASE_URL')
+db = SQLAlchemy(app)
+
+class User(db.Model):
+  __tablename__ = 'users'
+  id = db.Column(db.Integer, primary_key=True)
+  name = db.Column(db.String(80), unique=True, nullable=False)
+  email = db.Column(db.String(120), unique=True, nullable=False)
+
+  def json(self):
+    return {'id': self.id,'name': self.name, 'email': self.email}
+
+db.create_all()
+
+#create a test route
+@app.route('/test', methods=['GET'])
+def test():
+  return make_response(jsonify({'message': 'test route'}), 200)
+
+# create a user
+@app.route('/api/flask/users', methods=['POST'])
+def create_user():
+  try:
+    data = request.get_json()
+    new_user = User(name=data['name'], email=data['email'])
+    db.session.add(new_user)
+    db.session.commit()
+
+    return jsonify({
+        'id': new_user.id,
+        'name': new_user.name,
+        'email': new_user.email
+    }), 201
+  except Exception as e:
+      return make_response(jsonify({'message': 'error creating user', 'error': str(e)}), 500)
+
+# get all users
+@app.route('/api/flask/users', methods=['GET'])
+def get_users():
+  try:
+    users = User.query.all()
+    users_data = [{'id': user.id, 'name': user.name, 'email': user.email} for user in users]
+    return jsonify(users_data), 200
+  except Exception as e:
+    return make_response(jsonify({'message': 'error getting users', 'error': str(e)}), 500)
+
+# get a user by id
+@app.route('/api/flask/users/<int:id>', methods=['GET'])
+def get_user(id):
+  try:
+    user = User.query.filter_by(id=id).first()
+    if user:
+      return make_response(jsonify({'user': user.json()}), 200)
+    return make_response(jsonify({'message': 'user not found'}), 404)
+  except Exception as e:
+    return make_response(jsonify({'message': 'error getting user', 'error': str(e)}), 500)
+
+# update a user
+@app.route('/api/flask/users/<int:id>', methods=['PUT'])
+def update_user(id):
+  try:
+    user = User.query.filter_by(id=id).first()
+    if user:
+      data = request.get_json()
+      user.name = data['name']
+      user.email = data['email']
+      db.session.commit()
+      return make_response(jsonify({'message': 'user updated'}), 200)
+    return make_response(jsonify({'message': 'user not found'}), 404)
+  except Exception as e:
+    return make_response(jsonify({'message': 'error updating user', 'error': str(e)}), 500)
+
+# delete a user
+@app.route('/api/flask/users/<int:id>', methods=['DELETE'])
+def delete_user(id):
+  try:
+    user = User.query.filter_by(id=id).first()
+    if user:
+      db.session.delete(user)
+      db.session.commit()
+      return make_response(jsonify({'message': 'user deleted'}), 200)
+    return make_response(jsonify({'message': 'user not found'}), 404)
+  except Exception as e:
+    return make_response(jsonify({'message': 'error deleting user', 'error': str(e)}), 500)
+
+
+For an explanation, check: https://youtu.be/njNXTM6L0wc
+
+We are importing:
+
+    Flask as a framework
+    request to handle the HTTP
+    jsonify to handle the json format, not native in Python
+    make_response to handle the HTTP responses
+    flask_sqlalchemy to handle the db queries
+    environ to handle the environment variables
+    CORS to handle the Cross Origin Resource Sharing
+
+Then we are creating the Flask app, configuring the database bu setting an environment variable called 'DATABASE_URL'. We will set it later in the docker-compose.yml file.
+
+Then we are creating a User class with an id, a name and an email. the id will be autoincremented automatically by SQLAlchemy when we will create the users. the tablename = 'users' line is to define the name of the table in the database
+We are creating Flask app, configuring the database bu setting an environment variable called 'DB_URL'. We will set it later in the docker-compose.yml file.
+
+Then we are creating a User class with an id, a name and an email. the id will be autoincremented automatically by SQLAlchemy when we will create the users. the tablename = 'users' line is to define the name of the table in the database
+
+An important line is db.create_all(). This will synchronize the database with the model defined, for example creating an "users" table.
+
+Then we have 6 endpoints
+
+test: just a test route
+create a user: create a user with a name and an email
+get all users: get all the users in the database
+get one user: get one user by id
+update one user: update one user by id
+delete one user: delete one user by id
+All the routes have error handling, for example if the user is not found, we will return a 404 HTTP response.
+
+You can check a video-explanation here
+🐳 Dockerize the Python app
+
+The flask.dockerfile file is the file that will be used to containerize the Flask application.
+
+Create a file called flask.dockerfile in the backend folder and add the following content:
+
+
+
+FROM python:3.6-slim-buster
+
+WORKDIR /app
+
+COPY requirements.txt ./
+
+RUN pip install -r requirements.txt
+
+COPY . .
+
+EXPOSE 4000
+
+CMD [ "flask", "run", "--host=0.0.0.0", "--port=4000"]
+
+
+FROM sets the base image to use. In this case we are using the python 3.6 slim buster image
+
+WORKDIR sets the working directory inside the image
+
+COPY requirements.txt ./ copies the requirements.txt file to the working directory
+
+RUN pip install -r requirements.txt installs the requirements
+
+COPY . . copies all the files in the current directory to the working directory
+
+EXPOSE 4000 exposes the port 4000
+
+CMD [ "flask", "run", "--host=0.0.0.0", "--port=4000"] sets the command to run when the container starts
+
+For an explanation, check https://youtu.be/njNXTM6L0wc
+🐙 update the compose.yml file
+
+Update the compose.yml file in the project's root, adding the flaskapp service.
+
+Below the updated version:
+
+
+
+services:
+  flaskapp:
+    container_name: flaskapp
+    image: flaskapp:1.0.0
+    build:
+      context: ./backend
+      dockerfile: flask.dockerfile
+    ports:
+      - '4000:4000'
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+    depends_on:
+      - db
+  db:
+    container_name: db
+    image: postgres:13
+    restart: always
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata:
+
+
+For an explanation, check: https://youtu.be/njNXTM6L0wc
+Build the image and run the container
+
+Now, let's build the image and run the container:
+
+
+
+docker compose build
+docker compose up -d flaskapp
+docker ps -a
+
+
+Flask, Python + TypeScript full stack web app, with next
+
+We are now ready to test the backend.
+🧪 Test the backend
+
+We are now ready to test the backend.
+
+You can use Postman or any other tool to make HTTP requests.
+get all
+
+Yoy can get all the users, but making a GET request to http://localhost:4000/api/flask/users
+
+Flask, Python + TypeScript full stack web app, with next
+Create a new user
+
+You can create a new user, but making a POST request to http://localhost:4000/api/flask/users
+
+Flask, Python + TypeScript full stack web app, with next
+
+You can create 2 more users, to have a total of 3 users.
+
+Let's check the database:
+
+
+
+docker exec -it db psql -U postgres
+select * from users;
+
+
+Flask, Python + TypeScript full stack web app, with next
+update and delete a user
+
+You can update a user, but making a PUT request to http://localhost:4000/api/flask/users/3
+
+You can delete a user, but making a DELETE request to http://localhost:4000/api/flask/users/3
+4. Frontend
+
+Now that we have the backend up and running, we can proceed with the frontend.
+
+We will use Next.js 14 with TypeScript and Tailwind.
+
+From the root folder of the project, run this command:
+
+
+
+npx create-next-app@latest --no-git
+
+
+We use the --no-git flag because we already initialized a git repository at the project's root.
+
+As options:
+
+    What is your project named? frontend
+    TypeScript? Yes
+    EsLint? Yes
+    Tailwind CSS? Yes
+    Use the default directory structure? Yes
+    App Router? No (not needed for this project)
+    Customize the default import alias? No
+
+This should create a new Next.js project in about one minute.
+
+Flask, Python + TypeScript full stack web app, with next
+
+Step into the frontend folder:
+
+
+
+cd frontend
+
+
+Install Axios, we will use it to make HTTP requests (be sure to be in the frontend folder):
+
+
+
+npm i axios
+
+
+Before we proceed, try to run the project:
+
+
+
+npm run dev
+
+
+And open your browser at http://localhost:3000. You should see the default Next.js page.
+
+Flask, Python + TypeScript full stack web app, with next
+🖋️ Modify the styles/global.css file
+
+In the src/frontend/src/styles/globals.css file, replace the content with this one (to avoid some problems with Tailwind):
+
+
+
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+:root {
+  --foreground-rgb: 0, 0, 0;
+  --background-start-rgb: 214, 219, 220;
+  --background-end-rgb: 255, 255, 255;
+}
+
+body {
+  color: rgb(var(--foreground-rgb));
+  background: linear-gradient(to bottom, transparent, rgb(var(--background-end-rgb))) rgb(var(--background-start-rgb));
+}
+
+
+Create new components
+
+
+
+cd src
+mkdir components
+touch CardComponent.tsx UserInterface.tsx
+
+
+In the /frontend/src folder, create a new folder called components and inside it create a new file called CardComponent.tsx and add the following content:
+
+
+
+import React from 'react';
+
+interface Card {
+  id: number;
+  name: string;
+  email: string;
+}
+
+const CardComponent: React.FC<{ card: Card }> = ({ card }) => {
+  return (
+    <div className="bg-white shadow-lg rounded-lg p-2 mb-2 hover:bg-gray-100">
+      <div className="text-sm text-gray-600">Id: {card.id}</div>
+      <div className="text-lg font-semibold text-gray-800">{card.name}</div>
+      <div className="text-md text-gray-700">{card.email}</div>
+    </div>
+  );
+};
+
+export default CardComponent;
+
+
+Create a UserInterface component
+
+In the /frontend/src/components folder, create a file called UserInterface.tsx and add the following content:
+
+
+
+import React, { useState, useEffect } from 'react';
+import axios from 'axios';
+import CardComponent from './CardComponent';
+
+interface User {
+  id: number;
+  name: string;
+  email: string;
+}
+
+interface UserInterfaceProps {
+  backendName: string;
+}
+
+const UserInterface: React.FC<UserInterfaceProps> = ({ backendName }) => {
+  const apiUrl = process.env.NEXT_PUBLIC_API_URL || 'http://localhost:4000';
+  const [users, setUsers] = useState<User[]>([]);
+  const [newUser, setNewUser] = useState({ name: '', email: '' });
+  const [updateUser, setUpdateUser] = useState({ id: '', name: '', email: '' });
+
+  const backgroundColors: { [key: string]: string } = {
+    flask: 'bg-blue-500',
+  };
+
+  const buttonColors: { [key: string]: string } = {
+    flask: 'bg-blue-700 hover:bg-blue-600',
+  };
+
+  const bgColor = backgroundColors[backendName as keyof typeof backgroundColors] || 'bg-gray-200';
+  const btnColor = buttonColors[backendName as keyof typeof buttonColors] || 'bg-gray-500 hover:bg-gray-600';
+
+  // Fetch users
+  useEffect(() => {
+    const fetchData = async () => {
+      try {
+        const response = await axios.get(`${apiUrl}/api/${backendName}/users`);
+        setUsers(response.data.reverse());
+      } catch (error) {
+        console.error('Error fetching data:', error);
+      }
+    };
+
+    fetchData();
+  }, [backendName, apiUrl]);
+
+  // Create a user
+  const createUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      const response = await axios.post(`${apiUrl}/api/${backendName}/users`, newUser);
+      setUsers([response.data, ...users]);
+      setNewUser({ name: '', email: '' });
+    } catch (error) {
+      console.error('Error creating user:', error);
+    }
+  };
+
+  // Update a user
+  const handleUpdateUser = async (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    try {
+      await axios.put(`${apiUrl}/api/${backendName}/users/${updateUser.id}`, { name: updateUser.name, email: updateUser.email });
+      setUpdateUser({ id: '', name: '', email: '' });
+      setUsers(
+        users.map((user) => {
+          if (user.id === parseInt(updateUser.id)) {
+            return { ...user, name: updateUser.name, email: updateUser.email };
+          }
+          return user;
+        })
+      );
+    } catch (error) {
+      console.error('Error updating user:', error);
+    }
+  };
+
+  // Delete a user
+  const deleteUser = async (userId: number) => {
+    try {
+      await axios.delete(`${apiUrl}/api/${backendName}/users/${userId}`);
+      setUsers(users.filter((user) => user.id !== userId));
+    } catch (error) {
+      console.error('Error deleting user:', error);
+    }
+  };
+
+  return (
+    <div className={`user-interface ${bgColor} ${backendName} w-full max-w-md p-4 my-4 rounded shadow`}>
+      <img src={`/${backendName}logo.svg`} alt={`${backendName} Logo`} className="w-20 h-20 mb-6 mx-auto" />
+      <h2 className="text-xl font-bold text-center text-white mb-6">{`${backendName.charAt(0).toUpperCase() + backendName.slice(1)} Backend`}</h2>
+
+      {/* Form to add new user */}
+      <form onSubmit={createUser} className="mb-6 p-4 bg-blue-100 rounded shadow">
+        <input
+          placeholder="Name"
+          value={newUser.name}
+          onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+          className="mb-2 w-full p-2 border border-gray-300 rounded"
+        />
+
+        <input
+          placeholder="Email"
+          value={newUser.email}
+          onChange={(e) => setNewUser({ ...newUser, email: e.target.value })}
+          className="mb-2 w-full p-2 border border-gray-300 rounded"
+        />
+        <button type="submit" className="w-full p-2 text-white bg-blue-500 rounded hover:bg-blue-600">
+          Add User
+        </button>
+      </form>
+
+      {/* Form to update user */}
+      <form onSubmit={handleUpdateUser} className="mb-6 p-4 bg-blue-100 rounded shadow">
+        <input
+          placeholder="User Id"
+          value={updateUser.id}
+          onChange={(e) => setUpdateUser({ ...updateUser, id: e.target.value })}
+          className="mb-2 w-full p-2 border border-gray-300 rounded"
+        />
+        <input
+          placeholder="New Name"
+          value={updateUser.name}
+          onChange={(e) => setUpdateUser({ ...updateUser, name: e.target.value })}
+          className="mb-2 w-full p-2 border border-gray-300 rounded"
+        />
+        <input
+          placeholder="New Email"
+          value={updateUser.email}
+          onChange={(e) => setUpdateUser({ ...updateUser, email: e.target.value })}
+          className="mb-2 w-full p-2 border border-gray-300 rounded"
+        />
+        <button type="submit" className="w-full p-2 text-white bg-green-500 rounded hover:bg-green-600">
+          Update User
+        </button>
+      </form>
+
+      {/* Display users */}
+      <div className="space-y-4">
+        {users.map((user) => (
+          <div key={user.id} className="flex items-center justify-between bg-white p-4 rounded-lg shadow">
+            <CardComponent card={user} />
+            <button onClick={() => deleteUser(user.id)} className={`${btnColor} text-white py-2 px-4 rounded`}>
+              Delete User
+            </button>
+          </div>
+        ))}
+      </div>
+    </div>
+  );
+};
+
+export default UserInterface;
+
+
+For an explanation, check: https://youtu.be/njNXTM6L0wc
+Modify the index.tsx file
+
+Opne the index.tsx file and replace the content with the following:
+
+
+
+import React from 'react';
+import UserInterface from '../components/UserInterface';
+
+const Home: React.FC = () => {
+  return (
+    <main className="flex flex-wrap justify-center items-start min-h-screen bg-gray-100">
+      <div className="m-4">
+        <UserInterface backendName="flask" />
+      </div>
+    </main>
+  );
+};
+
+export default Home;
+
+
+For the explanation, check: https://youtu.be/njNXTM6L0wc
+Add the Flask/Python logo
+
+In the /frontend/public folder, add the flasklogo.svg file.
+
+Refresh the page and you should see the flask logo.
+
+Flask, Python + TypeScript full stack web app, with next
+🧪 Test the frontend
+
+We are now ready to test the frontend.
+
+You can use the UI to insert, update, and delete users.
+
+You can create a user directly from the UI
+
+Flask, Python + TypeScript full stack web app, with next
+
+You can check the updated users in the POsgres database
+
+
+
+docker exec -it db psql -U postgres
+select * from users;
+
+
+Flask, Python + TypeScript full stack web app, with next
+
+You can also update a user
+
+Flask, Python + TypeScript full stack web app, with next
+
+And finally, you can delete a user, just by clicking on the "Delete User' button
+
+Flask, Python + TypeScript full stack web app, with next
+
+You can check the content of the database with the following command:
+
+
+
+docker exec -it db psql -U postgres
+select * from users;
+
+
+Flask, Python + TypeScript full stack web app, with next
+Dockerize the frontend
+
+Deploy a Next.js app with Docker.
+
+Change the next.config.js file in the frontend folder, replacing it with the following content:
+
+
+
+/** @type {import('next').NextConfig} */
+const nextConfig = {
+  output: 'standalone',
+};
+
+module.exports = nextConfig;
+
+
+Create a file called .dockerignore in the frontend folder and add the following content:
+
+
+
+touch .dockerignore next.dockerfile
+
+
+
+
+next.dockerfile
+.dockerignore
+node_modules
+npm-debug.log
+README.md
+.next
+.git
+
+
+To dockerize the Next.js application, we will use the official Dockerfile provided by Vercel:
+
+You can find it here: https://github.com/vercel/next.js/blob/canary/examples/with-docker/Dockerfile
+
+Create a file called next.dockerfile in the frontend folder and add the following content (it's directly from the vercel official docker example)
+
+
+
+FROM node:18-alpine AS base
+
+# Install dependencies only when needed
+FROM base AS deps
+# Check https://github.com/nodejs/docker-node/tree/b4117f9333da4138b03a546ec926ef50a31506c3#nodealpine to understand why libc6-compat might be needed.
+RUN apk add --no-cache libc6-compat
+WORKDIR /app
+
+# Install dependencies based on the preferred package manager
+COPY package.json yarn.lock* package-lock.json* pnpm-lock.yaml* ./
+RUN \
+  if [ -f yarn.lock ]; then yarn --frozen-lockfile; \
+  elif [ -f package-lock.json ]; then npm ci; \
+  elif [ -f pnpm-lock.yaml ]; then yarn global add pnpm && pnpm i --frozen-lockfile; \
+  else echo "Lockfile not found." && exit 1; \
+  fi
+
+
+# Rebuild the source code only when needed
+FROM base AS builder
+WORKDIR /app
+COPY --from=deps /app/node_modules ./node_modules
+COPY . .
+
+# Next.js collects completely anonymous telemetry data about general usage.
+# Learn more here: https://nextjs.org/telemetry
+# Uncomment the following line in case you want to disable telemetry during the build.
+# ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN yarn build && ls -l /app/.next
+
+
+# If using npm comment out above and use below instead
+# RUN npm run build
+
+# Production image, copy all the files and run next
+FROM base AS runner
+WORKDIR /app
+
+ENV NODE_ENV production
+# Uncomment the following line in case you want to disable telemetry during runtime.
+# ENV NEXT_TELEMETRY_DISABLED 1
+
+RUN addgroup --system --gid 1001 nodejs
+RUN adduser --system --uid 1001 nextjs
+
+COPY --from=builder /app/public ./public
+
+# Set the correct permission for prerender cache
+RUN mkdir .next
+RUN chown nextjs:nodejs .next
+
+# Automatically leverage output traces to reduce image size
+# https://nextjs.org/docs/advanced-features/output-file-tracing
+COPY --from=builder --chown=nextjs:nodejs /app/.next/standalone ./
+COPY --from=builder --chown=nextjs:nodejs /app/.next/static ./.next/static
+
+USER nextjs
+
+EXPOSE 3000
+
+ENV PORT 3000
+# set hostname to localhost
+ENV HOSTNAME "0.0.0.0"
+
+# server.js is created by next build from the standalone output
+# https://nextjs.org/docs/pages/api-reference/next-config-js/output
+CMD ["node", "server.js"]
+
+
+Now, let's update the compose.yaml file in the project's root, adding the nextapp service.
+
+Below the updated version:
+
+
+
+services:
+  nextapp:
+    container_name: nextapp
+    image: nextapp:1.0.0
+    build:
+      context: ./frontend
+      dockerfile: next.dockerfile
+    ports:
+      - "3000:3000"
+    environment:
+      - NEXT_PUBLIC_API_URL=http://localhost:4000
+    depends_on:
+      - flaskapp
+
+  # flask service
+  flaskapp:
+    container_name: flaskapp
+    image: flaskapp:1.0.0
+    build:
+      context: ./backend
+      dockerfile: flask.dockerfile
+    ports:
+      - '4000:4000'
+    restart: always
+    environment:
+      - DATABASE_URL=postgresql://postgres:postgres@db:5432/postgres
+    depends_on:
+      - db
+
+  # db service
+  db:
+    container_name: db
+    image: postgres:13
+    environment:
+      POSTGRES_USER: postgres
+      POSTGRES_PASSWORD: postgres
+      POSTGRES_DB: postgres
+    ports:
+      - 5432:5432
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+
+volumes:
+  pgdata: {}
+
+
+
+
+And now, let's build the image and run the container:
+
+
+
+docker compose build
+docker compose up -d nextapp
+
+
+You can check if the 3 containers are running:
+
+
+
+docker ps -a
+
+
+Flask, Python + TypeScript full stack web app, with next
+
+If you have the 3 services running, should be good to go.
+
+Before we wrap up, let's make a final test using the UI.
+🧪 Test the frontend
+
+As a final test, we can check if the frontend is working.
+
+To create a new user, add a name and email
+
+Flask, Python + TypeScript full stack web app, with next
+
+We can check the list of users from the UI or directly from the database:
+
+
+
+docker exec -it db psql -U postgres
+\dt
+select * from users;
+
+
+Flask, Python + TypeScript full stack web app, with next
+📝 Recap
+
+We made it 🎉
+
+We build a simple yet complete Python full-stack web app using:
+
+    Next.js 14 (TypeScript)
+    Tailwind CSS
+    Flask (Python) + SQLAlchemy (ORM)
+    PostgreSQL
+    Docker
+    Docker Compose
